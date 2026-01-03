@@ -1,143 +1,127 @@
 <?php
 /*
- * Plugin Name:       Cirilica u latinicu
- * Plugin URI:        https://example.com/plugins/the-basics/
- * Description:       Converts Serbian Cyrillic text to Latinic.
- * Version:           1.0
- * Requires at least: 5.2
- * Requires PHP:      8.0
- * Author:            WebHostingSrbija
- * Author URI:        https://www.webhostingsrbija.rs/
- * License:           GPL v2 or later
- * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Update URI:        https://github.com/webhostingsrbijaRS/cirilica-u-latinicu
- * Text Domain:       cirilica-u-latinicu
+Plugin Name:       Cirilica u latinicu (WHS)
+Plugin URI:        https://www.webhostingsrbija.rs/
+Description:       Pouzdana konverzija srpske ćirilice u latinicu (frontend) bez menjanja baze. WooCommerce-friendly.
+Version:           1.1.0
+Requires at least: 5.2
+Requires PHP:      8.0
+Author:            WebHostingSrbija
+Author URI:        https://www.webhostingsrbija.rs/
+License:           GPL v2 or later
+Text Domain:       cirilica-u-latinicu
+*/
+
+if (!defined('ABSPATH')) { exit; }
+
+/**
+ * Brza provera: radi konverziju samo ako string sadrži ćirilicu.
  */
+function whs_c2l_has_cyrillic($text): bool {
+    return is_string($text) && $text !== '' && preg_match('/\p{Cyrillic}/u', $text);
+}
 
+/**
+ * Srpska ćirilica -> latinica (sa LJ/NJ/DŽ i Đ/Ć/Č/Ž/Š).
+ * Ne dira bazu, radi na izlazu.
+ */
+function whs_c2l($text) {
+    if (!is_string($text) || $text === '' || !whs_c2l_has_cyrillic($text)) {
+        return $text;
+    }
 
-function cyrillic_to_latinic($text) {
-    $cyrillic = array(
-        'А', 'Б', 'В', 'Г', 'Д', 'Ђ', 'Е', 'Ж', 'З', 'И', 'Ј', 'К', 'Л', 'Љ', 'М', 'Н', 'Њ', 'О', 'П', 'Р', 'С', 'Т', 'Ћ', 'У', 'Ф', 'Х', 'Ц', 'Ч', 'Џ', 'Ш',
-        'а', 'б', 'в', 'г', 'д', 'ђ', 'е', 'ж', 'з', 'и', 'ј', 'к', 'л', 'љ', 'м', 'н', 'њ', 'о', 'п', 'р', 'с', 'т', 'ћ', 'у', 'ф', 'х', 'ц', 'ч', 'џ', 'ш'
+    static $map = null;
+    if ($map === null) {
+        $map = [
+            'А'=>'A','Б'=>'B','В'=>'V','Г'=>'G','Д'=>'D','Ђ'=>'Đ','Е'=>'E','Ж'=>'Ž','З'=>'Z','И'=>'I','Ј'=>'J','К'=>'K','Л'=>'L','Љ'=>'Lj','М'=>'M','Н'=>'N','Њ'=>'Nj','О'=>'O','П'=>'P','Р'=>'R','С'=>'S','Т'=>'T','Ћ'=>'Ć','У'=>'U','Ф'=>'F','Х'=>'H','Ц'=>'C','Ч'=>'Č','Џ'=>'Dž','Ш'=>'Š',
+            'а'=>'a','б'=>'b','в'=>'v','г'=>'g','д'=>'d','ђ'=>'đ','е'=>'e','ж'=>'ž','з'=>'z','и'=>'i','ј'=>'j','к'=>'k','л'=>'l','љ'=>'lj','м'=>'m','н'=>'n','њ'=>'nj','о'=>'o','п'=>'p','р'=>'r','с'=>'s','т'=>'t','ћ'=>'ć','у'=>'u','ф'=>'f','х'=>'h','ц'=>'c','ч'=>'č','џ'=>'dž','ш'=>'š',
+        ];
+    }
+
+    // Ako je reč u ALL CAPS, hoćemo LJ/NJ/DŽ umesto Lj/Nj/Dž.
+    // Primer: "ЉУБАВ" -> "LJUBAV"
+    $text = preg_replace_callback(
+        '/(Љ|Њ|Џ)(?=[A-ZА-ЯЉЊЏŠĐČĆŽ])|(\b[А-ЯЉЊЏ]+(?:\b))/u',
+        function ($m) {
+            // Prvi deo: pojedinačni digraf pre velikog slova
+            if (!empty($m[1])) {
+                return $m[1] === 'Љ' ? 'LJ' : ($m[1] === 'Њ' ? 'NJ' : 'DŽ');
+            }
+            // Drugi deo: cela reč ALL CAPS - samo vrati (dalje će strtr uraditi ostalo),
+            // ali prvo pretvori digrafe u uppercase varijante.
+            if (!empty($m[2])) {
+                return str_replace(['Љ','Њ','Џ'], ['LJ','NJ','DŽ'], $m[2]);
+            }
+            return $m[0];
+        },
+        $text
     );
-    
-    $latinic = array(
-        'A', 'B', 'V', 'G', 'D', 'Đ', 'E', 'Ž', 'Z', 'I', 'J', 'K', 'L', 'Lj', 'M', 'N', 'Nj', 'O', 'P', 'R', 'S', 'T', 'Ć', 'U', 'F', 'H', 'C', 'Č', 'Dž', 'Š',
-        'a', 'b', 'v', 'g', 'd', 'đ', 'e', 'ž', 'z', 'i', 'j', 'k', 'l', 'lj', 'm', 'n', 'nj', 'o', 'p', 'r', 's', 't', 'ć', 'u', 'f', 'h', 'c', 'č', 'dž', 'š'
-    );
 
-    return str_replace($cyrillic, $latinic, $text);
+    return strtr($text, $map);
 }
 
-// General WordPress content
-add_filter('the_content', 'cyrillic_to_latinic');
-add_filter('the_title', 'cyrillic_to_latinic');
-add_filter('the_excerpt', 'cyrillic_to_latinic');
-add_filter('widget_text', 'cyrillic_to_latinic');
-add_filter('widget_text_content', 'cyrillic_to_latinic');
-add_filter('widget_title', 'cyrillic_to_latinic');
-
-// Navigation menus
-add_filter('nav_menu_item_title', 'cyrillic_to_latinic');
-add_filter('nav_menu_description', 'cyrillic_to_latinic');
-add_filter('nav_menu_attribute_title', 'cyrillic_to_latinic');
-
-// WooCommerce content
-add_filter('woocommerce_product_title', 'cyrillic_to_latinic');
-add_filter('woocommerce_product_description', 'cyrillic_to_latinic');
-add_filter('woocommerce_product_short_description', 'cyrillic_to_latinic');
-add_filter('woocommerce_product_get_name', 'cyrillic_to_latinic');
-add_filter('woocommerce_cart_shipping_method_full_label', 'cyrillic_to_latinic', 9999);
-add_filter('woocommerce_cart_totals_shipping_label', 'cyrillic_to_latinic', 9999);
-add_filter('woocommerce_checkout_shipping_method_label', 'cyrillic_to_latinic', 9999);
-add_filter('woocommerce_shipping_rate_label', 'cyrillic_to_latinic', 9999);
-
-function convert_cyrillic_in_cart_checkout() {
-    ob_start();
+/**
+ * Gettext filteri: hvataju prevedene stringove (WooCommerce result count, labels, breadcrumb "Почетна", itd.)
+ */
+function whs_c2l_gettext($translated, $original, $domain) {
+    return whs_c2l($translated);
 }
-add_action('woocommerce_before_cart', 'convert_cyrillic_in_cart_checkout');
-add_action('woocommerce_before_checkout_form', 'convert_cyrillic_in_cart_checkout');
+add_filter('gettext', 'whs_c2l_gettext', 9999, 3);
+add_filter('gettext_with_context', 'whs_c2l_gettext', 9999, 3);
+add_filter('ngettext', 'whs_c2l_gettext', 9999, 3);
+add_filter('ngettext_with_context', 'whs_c2l_gettext', 9999, 3);
 
-function end_convert_cyrillic_in_cart_checkout() {
-    $output = ob_get_clean();
-    echo cyrillic_to_latinic($output);
+/**
+ * Dodatni WP sadržaj (minimalno, bez ludih admin filtera).
+ */
+add_filter('the_title', 'whs_c2l', 9999);
+add_filter('the_content', 'whs_c2l', 9999);
+add_filter('the_excerpt', 'whs_c2l', 9999);
+add_filter('widget_title', 'whs_c2l', 9999);
+add_filter('widget_text', 'whs_c2l', 9999);
+add_filter('widget_text_content', 'whs_c2l', 9999);
+add_filter('nav_menu_item_title', 'whs_c2l', 9999);
+add_filter('nav_menu_description', 'whs_c2l', 9999);
+
+/**
+ * Output buffering fallback: hvata sve što je promaklo (tema/plugini koji echo-ju direktno).
+ * Radi samo na frontendu i samo za HTML.
+ */
+$GLOBALS['whs_c2l_ob_started'] = false;
+
+function whs_c2l_should_buffer(): bool {
+    if (is_admin()) return false;
+    if (defined('DOING_AJAX') && DOING_AJAX) return false;
+    if (defined('REST_REQUEST') && REST_REQUEST) return false;
+    if (defined('WP_CLI') && WP_CLI) return false;
+    if (defined('DOING_CRON') && DOING_CRON) return false;
+    if (function_exists('wp_is_json_request') && wp_is_json_request()) return false;
+    if (is_feed() || is_trackback()) return false;
+    return true;
 }
-add_action('woocommerce_after_cart', 'end_convert_cyrillic_in_cart_checkout');
-add_action('woocommerce_after_checkout_form', 'end_convert_cyrillic_in_cart_checkout');
-add_filter('woocommerce_shipping_package_name', 'cyrillic_to_latinic', 9999);
 
-
-
-
-// Comments and their meta
-add_filter('comment_text', 'cyrillic_to_latinic');
-add_filter('comment_excerpt', 'cyrillic_to_latinic');
-
-// Meta data
-add_filter('single_post_title', 'cyrillic_to_latinic');
-add_filter('single_cat_title', 'cyrillic_to_latinic');
-add_filter('single_tag_title', 'cyrillic_to_latinic');
-add_filter('single_month_title', 'cyrillic_to_latinic');
-
-// Filters for themes & plugins
-add_filter('plugin_row_meta', 'cyrillic_to_latinic');
-add_filter('theme_row_meta', 'cyrillic_to_latinic');
-
-function transliterate_translated_strings($translated_text, $original_text, $domain) {
-    // Apply our transliteration function
-    return cyrillic_to_latinic($translated_text);
+function whs_c2l_buffer_callback($html) {
+    // Ne diraj ako nema ćirilice (brzo).
+    if (!whs_c2l_has_cyrillic($html)) return $html;
+    return whs_c2l($html);
 }
-add_filter('gettext', 'transliterate_translated_strings', 20, 3);
-add_filter('ngettext', 'transliterate_translated_strings', 20, 3);
 
-function custom_currency_symbol( $currency_symbol, $currency ) {
-    if ( $currency == 'RSD' ) {
-        return 'rsd';
+function whs_c2l_buffer_start() {
+    if (!whs_c2l_should_buffer()) return;
+
+    // Ne startuj buffer ako je već startovan u nekom konfliktu.
+    if (!empty($GLOBALS['whs_c2l_ob_started'])) return;
+
+    $GLOBALS['whs_c2l_ob_started'] = true;
+    ob_start('whs_c2l_buffer_callback');
+}
+add_action('template_redirect', 'whs_c2l_buffer_start', 0);
+
+function whs_c2l_buffer_end() {
+    if (empty($GLOBALS['whs_c2l_ob_started'])) return;
+    // Zatvori samo naš buffer (ne ubijaj tuđe buffere).
+    if (ob_get_level() > 0) {
+        @ob_end_flush();
     }
-    return $currency_symbol;
 }
-add_filter('woocommerce_currency_symbol', 'custom_currency_symbol', 10, 2);
-
-// And many more filters depending on your needs...
-function convert_attribute_dropdown($args) {
-    // Convert the 'selected' value
-    if (isset($args['selected'])) {
-        $args['selected'] = cyrillic_to_latinic($args['selected']);
-    }
-
-    // Convert all options
-    foreach ($args['options'] as $key => $value) {
-        $args['options'][$key] = cyrillic_to_latinic($value);
-    }
-
-    return $args;
-}
-add_filter('woocommerce_dropdown_variation_attribute_options_args', 'convert_attribute_dropdown');
-
-function cyrillic_to_latinic_fragments($fragments) {
-    foreach ($fragments as $key => $fragment) {
-        $fragments[$key] = cyrillic_to_latinic($fragment);
-    }
-    return $fragments;
-}
-add_filter('woocommerce_add_to_cart_fragments', 'cyrillic_to_latinic_fragments');
-
-
-// Comments
-add_filter('get_comment_author', 'cyrillic_to_latinic');
-add_filter('get_comment_text', 'cyrillic_to_latinic');
-add_filter('get_comment_excerpt', 'cyrillic_to_latinic');
-add_filter('get_comment_date', 'cyrillic_to_latinic');
-
-// For plugins and themes
-add_filter('plugin_row_meta', 'cyrillic_to_latinic');
-add_filter('theme_row_meta', 'cyrillic_to_latinic');
-
-// For tags and categories
-add_filter('list_cats', 'cyrillic_to_latinic');
-add_filter('tag_rows', 'cyrillic_to_latinic');
-
-// For admin sections
-add_filter('admin_title', 'cyrillic_to_latinic');
-add_filter('display_post_states', 'cyrillic_to_latinic');
-add_filter('gettext', 'cyrillic_to_latinic', 20, 3);
+add_action('shutdown', 'whs_c2l_buffer_end', 0);
